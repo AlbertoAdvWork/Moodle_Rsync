@@ -340,42 +340,35 @@ class local_rsync_section extends external_api {
         // 4) Decodifica o inizializza availability.
         $existing = $section->availability
             ? json_decode($section->availability, true)
-            : ['op' => '&', 'c' => [], 'showc' => [true,true]];
+            : ['op' => '&', 'c' => [], 'showc' => [true, true]];
     
         // 5) FILTRAGGIO condizionale delle date
-        //    - se starttimestamp == 0 → rimuovi nodo “>=”  
-        //    - se endtimestamp   == 0 → rimuovi nodo “<”  
-        //    - altrimenti conserva i nodi di date non coinvolti  
         $rawconds = $existing['c'] ?? [];
         // normalizza in array indicizzato
         $conds = array_values($rawconds);
-    
         $conds = array_filter($conds, function($c) use($starttimestamp, $endtimestamp) {
             if (($c['type'] ?? '') !== 'date') {
-                // tutte le altre condizioni (profile, group, ecc.) restano
                 return true;
             }
-            // condizioni di data:
             $op = $c['d'] ?? '';
+            // se starttimestamp==0, tieni il nodo ‘>=’, altrimenti scartalo
             if ($op === '>=' && $starttimestamp === 0) {
-                // tengo l’eventuale vecchio vincolo di inizio
                 return true;
             }
+            // se endtimestamp==0, tieni il nodo ‘<’, altrimenti scartalo
             if ($op === '<' && $endtimestamp === 0) {
-                // tengo l’eventuale vecchio vincolo di fine
                 return true;
             }
-            // in tutti gli altri casi (sia che stia aggiornando o rimuovendo)
-            // elimino la condizione di data
+            // in tutti gli altri casi (lo stai aggiornando o rimuovendo), scarta
             return false;
         });
     
-        // 6) AGGIUNGI le nuove date se > 0
+        // 6) Aggiungi le nuove date se > 0
         if ($starttimestamp > 0) {
             $conds[] = condition::get_json('>=', $starttimestamp);
         }
         if ($endtimestamp > 0) {
-            $conds[] = condition::get_json('<',  $endtimestamp);
+            $conds[] = condition::get_json('<', $endtimestamp);
         }
     
         // 7) Re-index e serializza availability
@@ -384,6 +377,7 @@ class local_rsync_section extends external_api {
             ? null
             : json_encode($existing);
 
+        
         // 8) Salva e ricostruisci cache
         $DB->update_record('course_sections', $section);
         rebuild_course_cache($courseid, true);
