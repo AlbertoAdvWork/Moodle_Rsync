@@ -50,7 +50,7 @@ $functions = array(
         'type'        => 'write',
     ),
     
-    'local_rsync_section.update_section_date_availability' => array[
+    'local_rsync_update_section_date_availability' => array(
           'classname'   => 'local_rsync_section',
           'methodname'  => 'update_section_date_availability',
           'classpath'   => 'local/rsync/section.php',
