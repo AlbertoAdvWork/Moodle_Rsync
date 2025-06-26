@@ -30,6 +30,13 @@ require_once($CFG->dirroot. '/course/lib.php');
 require_once($CFG->dirroot . '/backup/util/includes/backup_includes.php');
 require_once($CFG->dirroot . "/backup/util/includes/restore_includes.php");
 
+require_once($CFG->dirroot . '/availability/condition/date/condition.php');
+require_once($CFG->dirroot . '/availability/tree.php');
+
+use core_availability\tree;
+use availability_date\condition;
+
+
 /**
  * Class local_rsync_section
  */
@@ -61,6 +68,20 @@ class local_rsync_section extends external_api {
         );
     }
 
+    /**
+     * Descrive i parametri del webservice.
+     *
+     * @return external_function_parameters
+     */
+    public static function update_section_date_availability_parameters() {
+        return new external_function_parameters([
+            'courseid'       => new external_value(PARAM_INT,  'ID del corso',            VALUE_REQUIRED),
+            'sectionnumber'  => new external_value(PARAM_INT,  'Numero della sezione',    VALUE_REQUIRED),
+            'starttimestamp' => new external_value(PARAM_INT,  'Unix ts inizio, 0 skip',  VALUE_REQUIRED),
+            'endtimestamp'   => new external_value(PARAM_INT,  'Unix ts fine, 0 skip',    VALUE_REQUIRED),
+        ]);
+    }
+        
     /**
      * Returns description of method parameters
      * @return external_function_parameters
@@ -287,6 +308,72 @@ class local_rsync_section extends external_api {
             'sectionnumber' => $sectionnumber, 'courseid' => $courseid, 'username' => fullname($USER)));
     }
 
+    /**
+     * Aggiorna solo le condizioni di data di una sezione, mantenendo
+     * inalterate tutte le altre (gruppi, completamenti, profili…).
+     *
+     * @param int $courseid       ID del corso
+     * @param int $sectionnumber  Numero sezione
+     * @param int $starttimestamp Unix ts (>=), 0 per non impostare
+     * @param int $endtimestamp   Unix ts (<),  0 per non impostare
+     * @return string             Messaggio di conferma
+     * @throws moodle_exception   Se permessi insufficienti o sezione mancante
+     */
+    public static function update_section_date_availability($courseid, $sectionnumber, $starttimestamp, $endtimestamp) {
+        global $USER, $DB;
+    
+        // 1) valida e pulisci i parametri
+        $params = self::validate_parameters(
+            self::update_section_date_availability_parameters(),
+            compact('courseid','sectionnumber','starttimestamp','endtimestamp')
+        );
+    
+        // 2) controlla contesto e capability
+        $context = \context_course::instance($courseid);
+        self::validate_context($context);
+        if (!has_capability('moodle/course:manageactivities', $context)) {
+            throw new moodle_exception('nopermissions', '', '', 'moodle/course:manageactivities');
+        }
+    
+        // 3) prendi la sezione
+        $section = $DB->get_record('course_sections',
+            ['course'=>$courseid,'section'=>$sectionnumber], '*', MUST_EXIST);
+    
+        // 4) decodifica availability esistente o crea struttura vuota
+        $existing = $section->availability
+            ? json_decode($section->availability, true)
+            : ['op'=>'&','c'=>[],'showc'=>[true,true]];
+    
+        // 5) togli qualsiasi condizione di tipo date
+        $existing['c'] = array_filter($existing['c'],
+            fn($c)=>($c['type'] ?? '')!=='date'
+        );
+    
+        // 6) aggiungi le nuove date
+        if ($starttimestamp>0) {
+            $existing['c'][] = condition::get_json('>=', $starttimestamp);
+        }
+        if ($endtimestamp>0) {
+            $existing['c'][] = condition::get_json('<',  $endtimestamp);
+        }
+    
+        // 7) ricostruisci il JSON (o null se nessuna condizione)
+        $section->availability = empty($existing['c'])
+            ? null
+            : json_encode($existing);
+    
+        // 8) salva e ricostruisci cache
+        $DB->update_record('course_sections', $section);
+        rebuild_course_cache($courseid, true);
+    
+        // 9) feedback all’utente
+        return get_string('successmessage_section_availability','local_rsync',[
+            'sectionnumber'=>$sectionnumber,
+            'courseid'=>$courseid,
+            'username'=>fullname($USER)
+        ]);
+    }
+    
     /**
      * Lets the user renane a section
      *
@@ -878,6 +965,15 @@ class local_rsync_section extends external_api {
         return new external_value(PARAM_TEXT, 'File name, section number, course id and username');
     }
 
+    /**
+     * Descrive il valore di ritorno del webservice
+     *
+     * @return external_description
+     */
+    public static function update_section_date_availability_returns() {
+        return new external_value(PARAM_TEXT, 'Messaggio di conferma');
+    }
+    
     /**
      * Returns description of method result value
      * @return external_description
