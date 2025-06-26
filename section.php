@@ -306,70 +306,96 @@ class local_rsync_section extends external_api {
     }
 
     /**
-     * Aggiorna solo le condizioni di data di una sezione, mantenendo
-     * inalterate tutte le altre (gruppi, completamenti, profili…).
+     * Aggiorna le condizioni di data di una sezione, rimuovendo
+     * solo i vincoli corrispondenti ai timestamp a 0 e aggiungendo
+     * i nuovi per quelli > 0. Tutte le altre regole restano intatte.
      *
      * @param int $courseid       ID del corso
-     * @param int $sectionnumber  Numero sezione
-     * @param int $starttimestamp Unix ts (>=), 0 per non impostare
-     * @param int $endtimestamp   Unix ts (<),  0 per non impostare
+     * @param int $sectionnumber  Numero della sezione
+     * @param int $starttimestamp Unix ts (>=), 0 per RIMUOVERE il vincolo di inizio
+     * @param int $endtimestamp   Unix ts (<),  0 per RIMUOVERE il vincolo di fine
      * @return string             Messaggio di conferma
-     * @throws moodle_exception   Se permessi insufficienti o sezione mancante
+     * @throws moodle_exception   Se permessi insufficienti o parametri errati
      */
     public static function update_section_date_availability($courseid, $sectionnumber, $starttimestamp, $endtimestamp) {
         global $USER, $DB;
     
-        // 1) valida e pulisci i parametri
+        // 1) Validazione params.
         $params = self::validate_parameters(
             self::update_section_date_availability_parameters(),
             compact('courseid','sectionnumber','starttimestamp','endtimestamp')
         );
     
-        // 2) controlla contesto e capability
+        // 2) Contesto e permessi.
         $context = \context_course::instance($courseid);
         self::validate_context($context);
         if (!has_capability('moodle/course:manageactivities', $context)) {
-            throw new moodle_exception('nopermissions', '', '', 'moodle/course:manageactivities');
+            throw new moodle_exception('nopermissions', 'error', '', 'moodle/course:manageactivities');
         }
     
-        // 3) prendi la sezione
+        // 3) Carica la sezione.
         $section = $DB->get_record('course_sections',
-            ['course'=>$courseid,'section'=>$sectionnumber], '*', MUST_EXIST);
+            ['course' => $courseid, 'section' => $sectionnumber], '*', MUST_EXIST);
     
-        // 4) decodifica availability esistente o crea struttura vuota
+        // 4) Decodifica o inizializza availability.
         $existing = $section->availability
             ? json_decode($section->availability, true)
-            : ['op'=>'&','c'=>[],'showc'=>[true,true]];
+            : ['op' => '&', 'c' => [], 'showc' => [true,true]];
     
-        // 5) togli qualsiasi condizione di tipo date
-        $existing['c'] = array_filter($existing['c'],
-            fn($c)=>($c['type'] ?? '')!=='date'
-        );
+        // 5) FILTRAGGIO condizionale delle date
+        //    - se starttimestamp == 0 → rimuovi nodo “>=”  
+        //    - se endtimestamp   == 0 → rimuovi nodo “<”  
+        //    - altrimenti conserva i nodi di date non coinvolti  
+        $rawconds = $existing['c'] ?? [];
+        // normalizza in array indicizzato
+        $conds = array_values($rawconds);
     
-        // 6) aggiungi le nuove date
-        if ($starttimestamp>0) {
-            $existing['c'][] = condition::get_json('>=', $starttimestamp);
+        $conds = array_filter($conds, function($c) use($starttimestamp, $endtimestamp) {
+            if (($c['type'] ?? '') !== 'date') {
+                // tutte le altre condizioni (profile, group, ecc.) restano
+                return true;
+            }
+            // condizioni di data:
+            $op = $c['d'] ?? '';
+            if ($op === '>=' && $starttimestamp === 0) {
+                // tengo l’eventuale vecchio vincolo di inizio
+                return true;
+            }
+            if ($op === '<' && $endtimestamp === 0) {
+                // tengo l’eventuale vecchio vincolo di fine
+                return true;
+            }
+            // in tutti gli altri casi (sia che stia aggiornando o rimuovendo)
+            // elimino la condizione di data
+            return false;
+        });
+    
+        // 6) AGGIUNGI le nuove date se > 0
+        if ($starttimestamp > 0) {
+            $conds[] = condition::get_json('>=', $starttimestamp);
         }
-        if ($endtimestamp>0) {
-            $existing['c'][] = condition::get_json('<',  $endtimestamp);
+        if ($endtimestamp > 0) {
+            $conds[] = condition::get_json('<',  $endtimestamp);
         }
     
-        // 7) ricostruisci il JSON (o null se nessuna condizione)
-        $section->availability = empty($existing['c'])
+        // 7) Ricompone availability (null se non ci sono date + altri filtri)
+        $existing['c'] = $conds;
+        $section->availability = empty($conds)
             ? null
             : json_encode($existing);
     
-        // 8) salva e ricostruisci cache
+        // 8) Salva e ricostruisci cache
         $DB->update_record('course_sections', $section);
         rebuild_course_cache($courseid, true);
     
-        // 9) feedback all’utente
-        return get_string('successmessage_section_availability','local_rsync',[
-            'sectionnumber'=>$sectionnumber,
-            'courseid'=>$courseid,
-            'username'=>fullname($USER)
+        // 9) Messaggio di conferma
+        return get_string('successmessage_section_availability', 'local_rsync', [
+            'sectionnumber' => $sectionnumber,
+            'courseid'      => $courseid,
+            'username'      => fullname($USER),
         ]);
     }
+
     
     /**
      * Lets the user renane a section
