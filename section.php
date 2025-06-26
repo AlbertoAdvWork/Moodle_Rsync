@@ -382,11 +382,6 @@ class local_rsync_section extends external_api {
         $existing['c'] = array_values($conds);
         $section->availability = empty($conds)
             ? null
-            : json_encode
-        // 7) Re-index e serializza availability
-        $existing['c'] = array_values($conds);
-        $section->availability = empty($conds)
-            ? null
             : json_encode($existing);
 
         // 8) Salva e ricostruisci cache
