@@ -378,12 +378,17 @@ class local_rsync_section extends external_api {
             $conds[] = condition::get_json('<',  $endtimestamp);
         }
     
-        // 7) Ricompone availability (null se non ci sono date + altri filtri)
+        // 7) Re-index e serializza availability
         $existing['c'] = array_values($conds);
         $section->availability = empty($conds)
             ? null
             : json_encode
-    
+        // 7) Re-index e serializza availability
+        $existing['c'] = array_values($conds);
+        $section->availability = empty($conds)
+            ? null
+            : json_encode($existing);
+
         // 8) Salva e ricostruisci cache
         $DB->update_record('course_sections', $section);
         rebuild_course_cache($courseid, true);
