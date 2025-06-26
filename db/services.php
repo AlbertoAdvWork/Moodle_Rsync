@@ -163,7 +163,7 @@ $services = array(
             'local_rsync_copy_module',
             'local_rsync_create_section',
             'local_rsync_copy_all_section_modules',
-            // La mia funzione per fare l'update delle date
+            // La mia funzione per fare l'update delle date, ancora in beta
             'local_rsync_update_section_date_availability'
         ),
         'restrictedusers' => 0,
