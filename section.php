@@ -30,9 +30,6 @@ require_once($CFG->dirroot. '/course/lib.php');
 require_once($CFG->dirroot . '/backup/util/includes/backup_includes.php');
 require_once($CFG->dirroot . "/backup/util/includes/restore_includes.php");
 
-require_once($CFG->dirroot . '/availability/condition/date/condition.php');
-require_once($CFG->dirroot . '/availability/tree.php');
-
 use core_availability\tree;
 use availability_date\condition;
 
