@@ -379,10 +379,10 @@ class local_rsync_section extends external_api {
         }
     
         // 7) Ricompone availability (null se non ci sono date + altri filtri)
-        $existing['c'] = $conds;
+        $existing['c'] = array_values($conds);
         $section->availability = empty($conds)
             ? null
-            : json_encode($existing);
+            : json_encode
     
         // 8) Salva e ricostruisci cache
         $DB->update_record('course_sections', $section);
