@@ -51,12 +51,12 @@ $functions = array(
     ),
     
     'local_rsync_update_section_date_availability' => array(
-          'classname'   => 'local_rsync_section',
-          'methodname'  => 'update_section_date_availability',
-          'classpath'   => 'local/rsync/section.php',
-          'description' => 'Aggiorna le condizioni di data di una sezione',
-          'type'        => 'write',
-      ],
+        'classname'   => 'local_rsync_section',
+        'methodname'  => 'update_section_date_availability',
+        'classpath'   => 'local/rsync/section.php',
+        'description' => 'Aggiorna le condizioni di data di una sezione',
+        'type'        => 'write',
+    ),
 
     'local_rsync_rename_section' => array(
         'classname'   => 'local_rsync_section',
